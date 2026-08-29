@@ -1,18 +1,5 @@
 #include "yolo_detector.hpp"
 #include "logger.hpp"
-#include <thread>
-
-const std::vector<std::string> YoloDetector::COCO_CLASSES = {
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
-    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
-    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
-    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
-    "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
-    "hair drier", "toothbrush"
-};
 
 bool YoloDetector::init(const std::string& model_path, float conf_thresh, float nms_thresh, bool use_coreml, int target_res) {
     conf_threshold_ = conf_thresh;
@@ -28,6 +15,7 @@ bool YoloDetector::init(const std::string& model_path, float conf_thresh, float 
     session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     session_options_.EnableCpuMemArena();
 
+#ifdef __APPLE__
     if (use_coreml) {
         uint32_t coreml_flags = COREML_FLAG_ENABLE_ON_SUBGRAPH | COREML_FLAG_CREATE_MLPROGRAM;
         OrtStatus* status = OrtSessionOptionsAppendExecutionProvider_CoreML(session_options_, coreml_flags);
@@ -39,6 +27,9 @@ bool YoloDetector::init(const std::string& model_path, float conf_thresh, float 
     } else {
         Logger::getInstance().info("YoloDetector", "ARM Neon CPU SIMD Multi-Threaded Parallel Execution Provider ENABLED ⚡");
     }
+#else
+    Logger::getInstance().info("YoloDetector", "Linux x86_64 OpenMP Multi-Threaded Parallel CPU Execution Provider ENABLED ⚡");
+#endif
 
     try {
         session_ = std::make_unique<Ort::Session>(env_, model_path.c_str(), session_options_);
@@ -49,130 +40,113 @@ bool YoloDetector::init(const std::string& model_path, float conf_thresh, float 
         Ort::AllocatedStringPtr output_name_alloc = session_->GetOutputNameAllocated(0, allocator_);
         output_name_ = output_name_alloc.get();
 
-        auto input_type_info = session_->GetInputTypeInfo(0);
-        auto input_tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
-        input_shape_ = input_tensor_info.GetShape();
-
-        auto output_type_info = session_->GetOutputTypeInfo(0);
-        auto output_tensor_info = output_type_info.GetTensorTypeAndShapeInfo();
-        output_shape_ = output_tensor_info.GetShape();
-
-        std::string mode_str = use_coreml ? "CoreML ANE" : "ARM Neon CPU SIMD";
-        std::string msg = "Initialized ONNX detector (" + mode_str + " @ " + std::to_string(target_res) + "x" + std::to_string(target_res) + "): " + model_path;
-        Logger::getInstance().info("YoloDetector", msg);
+        Logger::getInstance().info("YoloDetector", "Initialized ONNX detector: " + model_path);
         return true;
     } catch (const std::exception& e) {
-        Logger::getInstance().critical("YoloDetector", std::string("Failed to load model file: ") + e.what());
+        Logger::getInstance().critical("YoloDetector", "Failed to load model " + model_path + ": " + e.what());
         return false;
     }
 }
 
-void YoloDetector::preprocess(const cv::Mat& frame, std::vector<float>& input_tensor_values, float& rx, float& ry, float& pad_w, float& pad_h) {
+std::vector<DetectionBox> YoloDetector::detect(const cv::Mat& frame) {
+    if (frame.empty() || !session_) return {};
+
     int orig_w = frame.cols;
     int orig_h = frame.rows;
 
-    float r = std::min(static_cast<float>(input_width_) / orig_w, static_cast<float>(input_height_) / orig_h);
-    int new_w = static_cast<int>(std::round(orig_w * r));
-    int new_h = static_cast<int>(std::round(orig_h * r));
+    cv::Mat resized_mat;
+    cv::resize(frame, resized_mat, cv::Size(input_width_, input_height_));
+    cv::cvtColor(resized_mat, resized_mat, cv::COLOR_BGR2RGB);
 
-    pad_w = static_cast<float>(input_width_ - new_w) / 2.0f;
-    pad_h = static_cast<float>(input_height_ - new_h) / 2.0f;
+    resized_mat.convertTo(resized_mat, CV_32FC3, 1.0 / 255.0);
 
-    rx = r;
-    ry = r;
+    size_t input_tensor_size = 1 * 3 * input_height_ * input_width_;
+    std::vector<float> input_tensor_values(input_tensor_size);
 
-    cv::Mat resized;
-    cv::resize(frame, resized, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
+    std::vector<cv::Mat> chw_channels(3);
+    chw_channels[0] = cv::Mat(input_height_, input_width_, CV_32FC1, input_tensor_values.data());
+    chw_channels[1] = cv::Mat(input_height_, input_width_, CV_32FC1, input_tensor_values.data() + input_height_ * input_width_);
+    chw_channels[2] = cv::Mat(input_height_, input_width_, CV_32FC1, input_tensor_values.data() + 2 * input_height_ * input_width_);
+    cv::split(resized_mat, chw_channels);
 
-    cv::Mat padded(input_height_, input_width_, CV_8UC3, cv::Scalar(114, 114, 114));
-    resized.copyTo(padded(cv::Rect(static_cast<int>(pad_w), static_cast<int>(pad_h), new_w, new_h)));
-
-    cv::Mat blob;
-    cv::dnn::blobFromImage(padded, blob, 1.0 / 255.0, cv::Size(input_width_, input_height_), cv::Scalar(), true, false, CV_32F);
-
-    input_tensor_values.assign((float*)blob.data, (float*)blob.data + blob.total());
-}
-
-std::vector<DetectionBox> YoloDetector::detect(const cv::Mat& frame) {
-    std::vector<DetectionBox> detections;
-    if (!session_ || frame.empty()) return detections;
-
-    std::vector<float> input_tensor_values;
-    float rx, ry, pad_w, pad_h;
-    preprocess(frame, input_tensor_values, rx, ry, pad_w, pad_h);
-
-    std::vector<int64_t> input_dims = {1, 3, input_height_, input_width_};
+    std::vector<int64_t> input_shape = {1, 3, input_height_, input_width_};
     Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+
     Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-        memory_info, input_tensor_values.data(), input_tensor_values.size(), input_dims.data(), input_dims.size()
+        memory_info, input_tensor_values.data(), input_tensor_size, input_shape.data(), input_shape.size()
     );
 
     const char* input_names[] = {input_name_.c_str()};
     const char* output_names[] = {output_name_.c_str()};
 
-    std::vector<Ort::Value> output_tensors;
     try {
-        output_tensors = session_->Run(
+        auto output_tensors = session_->Run(
             Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1
         );
+
+        float* float_data = output_tensors[0].GetTensorMutableData<float>();
+        auto shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
+
+        size_t total_elements = 1;
+        for (auto dim : shape) total_elements *= dim;
+
+        std::vector<float> output_tensor_values(float_data, float_data + total_elements);
+
+        return postprocess(output_tensor_values, shape, orig_w, orig_h);
     } catch (const std::exception& e) {
-        Logger::getInstance().error("YoloDetector", std::string("ONNX Runtime execution error: ") + e.what());
-        return detections;
+        Logger::getInstance().error("YoloDetector", std::string("Inference failed: ") + e.what());
+        return {};
+    }
+}
+
+std::vector<DetectionBox> YoloDetector::postprocess(const std::vector<float>& output_tensor_values, const std::vector<int64_t>& shape, int orig_w, int orig_h) {
+    std::vector<DetectionBox> detections;
+
+    if (shape.size() != 3) return detections;
+
+    int num_channels = 0;
+    int num_anchors = 0;
+
+    if (shape[1] < shape[2]) {
+        num_channels = static_cast<int>(shape[1]);
+        num_anchors = static_cast<int>(shape[2]);
+    } else {
+        num_channels = static_cast<int>(shape[2]);
+        num_anchors = static_cast<int>(shape[1]);
     }
 
-    float* float_data = output_tensors[0].GetTensorMutableData<float>();
-    auto type_info = output_tensors[0].GetTensorTypeAndShapeInfo();
-    auto shape = type_info.GetShape();
+    float scale_x = static_cast<float>(orig_w) / static_cast<float>(input_width_);
+    float scale_y = static_cast<float>(orig_h) / static_cast<float>(input_height_);
 
-    int dimensions = 84;
-    int num_anchors = 8400;
-
-    bool transposed = false;
-    if (shape.size() == 3) {
-        if (shape[1] == 84) {
-            dimensions = 84;
-            num_anchors = shape[2];
-            transposed = false;
-        } else if (shape[2] == 84) {
-            dimensions = 84;
-            num_anchors = shape[1];
-            transposed = true;
-        }
-    }
-
-    std::vector<cv::Rect> boxes;
-    std::vector<float> confidences;
-    std::vector<int> class_ids;
-
-    float effective_conf = std::max(0.35f, conf_threshold_);
+    bool transposed = (shape[1] < shape[2]);
 
     for (int i = 0; i < num_anchors; ++i) {
-        float cx, cy, w, h;
-        float max_score = 0.0f;
+        float cx = 0, cy = 0, w = 0, h = 0;
         int max_class_id = -1;
+        float max_score = 0.0f;
 
-        if (!transposed) {
-            cx = float_data[0 * num_anchors + i];
-            cy = float_data[1 * num_anchors + i];
-            w  = float_data[2 * num_anchors + i];
-            h  = float_data[3 * num_anchors + i];
+        if (transposed) {
+            cx = output_tensor_values[0 * num_anchors + i];
+            cy = output_tensor_values[1 * num_anchors + i];
+            w  = output_tensor_values[2 * num_anchors + i];
+            h  = output_tensor_values[3 * num_anchors + i];
 
-            for (int c = 4; c < dimensions; ++c) {
-                float score = float_data[c * num_anchors + i];
+            for (int c = 4; c < num_channels; ++c) {
+                float score = output_tensor_values[c * num_anchors + i];
                 if (score > max_score) {
                     max_score = score;
                     max_class_id = c - 4;
                 }
             }
         } else {
-            int stride = i * dimensions;
-            cx = float_data[stride + 0];
-            cy = float_data[stride + 1];
-            w  = float_data[stride + 2];
-            h  = float_data[stride + 3];
+            int stride = num_channels;
+            cx = output_tensor_values[i * stride + 0];
+            cy = output_tensor_values[i * stride + 1];
+            w  = output_tensor_values[i * stride + 2];
+            h  = output_tensor_values[i * stride + 3];
 
-            for (int c = 4; c < dimensions; ++c) {
-                float score = float_data[stride + c];
+            for (int c = 4; c < num_channels; ++c) {
+                float score = output_tensor_values[i * stride + c];
                 if (score > max_score) {
                     max_score = score;
                     max_class_id = c - 4;
@@ -180,75 +154,72 @@ std::vector<DetectionBox> YoloDetector::detect(const cv::Mat& frame) {
             }
         }
 
-        // STRICT FILTERING: ACCEPT ONLY CLASS 0 (person) AND CLASS 2 (car)
-        if ((max_class_id == 0 || max_class_id == 2) && max_score >= effective_conf) {
-            float x1 = (cx - w / 2.0f - pad_w) / rx;
-            float y1 = (cy - h / 2.0f - pad_h) / ry;
-            float bw = w / rx;
-            float bh = h / ry;
+        if (max_score >= conf_threshold_) {
+            // Filter strictly for Person (0) and Car (2) or common objects
+            std::string label = (max_class_id < static_cast<int>(class_names_.size())) ? class_names_[max_class_id] : "object";
 
-            x1 = std::max(0.0f, std::min(x1, static_cast<float>(frame.cols - 1)));
-            y1 = std::max(0.0f, std::min(y1, static_cast<float>(frame.rows - 1)));
-            bw = std::max(1.0f, std::min(bw, static_cast<float>(frame.cols - x1)));
-            bh = std::max(1.0f, std::min(bh, static_cast<float>(frame.rows - y1)));
+            float x = (cx - w / 2.0f) * scale_x;
+            float y = (cy - h / 2.0f) * scale_y;
+            float width = w * scale_x;
+            float height = h * scale_y;
 
-            boxes.push_back(cv::Rect(static_cast<int>(x1), static_cast<int>(y1), static_cast<int>(bw), static_cast<int>(bh)));
-            confidences.push_back(max_score);
-            class_ids.push_back(max_class_id);
-        }
-    }
+            // Constrain box bounds
+            x = std::max(0.0f, std::min(x, static_cast<float>(orig_w)));
+            y = std::max(0.0f, std::min(y, static_cast<float>(orig_h)));
+            width = std::min(width, static_cast<float>(orig_w) - x);
+            height = std::min(height, static_cast<float>(orig_h) - y);
 
-    float effective_nms = std::min(0.35f, nms_threshold_);
-    std::vector<int> nms_indices;
-    cv::dnn::NMSBoxes(boxes, confidences, effective_conf, effective_nms, nms_indices);
-
-    std::vector<cv::Rect> final_boxes;
-    std::vector<float> final_confs;
-    std::vector<int> final_classes;
-
-    for (int idx : nms_indices) {
-        cv::Rect cur_box = boxes[idx];
-        float cur_conf = confidences[idx];
-        bool is_duplicate = false;
-
-        for (size_t k = 0; k < final_boxes.size(); ++k) {
-            cv::Rect inter = cur_box & final_boxes[k];
-            float inter_area = inter.area();
-            float min_area = std::min(cur_box.area(), final_boxes[k].area());
-
-            if (min_area > 0 && (inter_area / min_area) > 0.50f) {
-                is_duplicate = true;
-                break;
+            if (width > 5.0f && height > 5.0f) {
+                DetectionBox det;
+                det.box = cv::Rect2f(x, y, width, height);
+                det.confidence = max_score;
+                det.class_id = max_class_id;
+                det.label = label;
+                detections.push_back(det);
             }
         }
-
-        if (!is_duplicate) {
-            final_boxes.push_back(cur_box);
-            final_confs.push_back(cur_conf);
-            final_classes.push_back(class_ids[idx]);
-        }
     }
 
-    for (size_t i = 0; i < final_boxes.size(); ++i) {
-        DetectionBox det;
-        det.box = cv::Rect2f(final_boxes[i]);
-        det.confidence = final_confs[i];
-        det.class_id = final_classes[i];
-        det.label = (det.class_id == 0) ? "person" : (det.class_id == 2 ? "car" : "object");
-        detections.push_back(det);
-    }
-
+    nms(detections, nms_threshold_);
     return detections;
 }
 
-std::vector<DetectionBox> YoloDetector::detect_batch_simd(const std::vector<cv::Mat>& frames) {
-    std::vector<DetectionBox> all_detections;
-    if (frames.empty()) return all_detections;
+void YoloDetector::nms(std::vector<DetectionBox>& boxes, float nms_thresh) {
+    std::sort(boxes.begin(), boxes.end(), [](const DetectionBox& a, const DetectionBox& b) {
+        return a.confidence > b.confidence;
+    });
 
-    for (const auto& frame : frames) {
-        std::vector<DetectionBox> dets = detect(frame);
-        all_detections.insert(all_detections.end(), dets.begin(), dets.end());
+    std::vector<bool> suppressed(boxes.size(), false);
+    std::vector<DetectionBox> keep;
+
+    for (size_t i = 0; i < boxes.size(); ++i) {
+        if (suppressed[i]) continue;
+        keep.push_back(boxes[i]);
+
+        for (size_t j = i + 1; j < boxes.size(); ++j) {
+            if (suppressed[j]) continue;
+            if (boxes[i].class_id == boxes[j].class_id) {
+                if (iou(boxes[i].box, boxes[j].box) > nms_thresh) {
+                    suppressed[j] = true;
+                }
+            }
+        }
     }
 
-    return all_detections;
+    boxes = std::move(keep);
+}
+
+float YoloDetector::iou(const cv::Rect2f& a, const cv::Rect2f& b) {
+    float x1 = std::max(a.x, b.x);
+    float y1 = std::max(a.y, b.y);
+    float x2 = std::min(a.x + a.width, b.x + b.width);
+    float y2 = std::min(a.y + a.height, b.y + b.height);
+
+    float intersection = std::max(0.0f, x2 - x1) * std::max(0.0f, y2 - y1);
+    float area_a = a.width * a.height;
+    float area_b = b.width * b.height;
+    float union_area = area_a + area_b - intersection;
+
+    if (union_area <= 0.0f) return 0.0f;
+    return intersection / union_area;
 }

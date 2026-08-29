@@ -13,6 +13,7 @@ include_directories(
     /usr/local/include/onnxruntime
     /usr/include
     /opt/homebrew/include
+    /opt/homebrew/include/onnxruntime
     /opt/homebrew/opt/opencv/include/opencv4
 )
 
