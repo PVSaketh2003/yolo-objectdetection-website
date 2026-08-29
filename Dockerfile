@@ -30,13 +30,10 @@ FROM node:20-bullseye
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    libopencv-core4.5d \
-    libopencv-highgui4.5d \
-    libopencv-imgproc4.5d \
-    libopencv-videoio4.5d \
-    libopencv-imgcodecs4.5d \
+    libopencv-dev \
     ffmpeg \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
