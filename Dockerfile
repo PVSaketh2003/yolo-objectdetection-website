@@ -34,15 +34,22 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-# --- Stage 3: Production 24/7 Runtime Image ---
-FROM node:20-bullseye
+# --- Stage 3: Production 24/7 Runtime Image (Ubuntu 22.04 with Node.js 20) ---
+FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Install OpenCV runtime, Node.js 20, ffmpeg, curl
 RUN apt-get update && apt-get install -y \
-    libopencv-dev \
-    ffmpeg \
     curl \
     ca-certificates \
+    gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y \
+    nodejs \
+    libopencv-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
