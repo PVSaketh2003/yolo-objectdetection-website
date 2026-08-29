@@ -4,19 +4,24 @@ project(yolo_tracker_backend CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(OpenCV REQUIRED)
+
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${OpenCV_INCLUDE_DIRS}
+    /usr/local/include
+    /usr/local/include/onnxruntime
+    /usr/include
     /opt/homebrew/include
     /opt/homebrew/opt/opencv/include/opencv4
-    /opt/homebrew/include/onnxruntime
 )
 
 link_directories(
+    /usr/local/lib
+    /usr/lib
     /opt/homebrew/lib
     /opt/homebrew/opt/opencv/lib
 )
-
-find_package(OpenCV REQUIRED)
 
 add_executable(yolo_tracker_backend
     src/main.cpp

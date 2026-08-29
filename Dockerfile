@@ -9,9 +9,18 @@ RUN apt-get update && apt-get install -y \
     cmake \
     git \
     libopencv-dev \
+    nlohmann-json3-dev \
     curl \
     ca-certificates \
+    tar \
     && rm -rf /var/lib/apt/lists/*
+
+# Download & Install ONNX Runtime C++ v1.17.1 Linux x64
+RUN curl -L -O https://github.com/microsoft/onnxruntime/releases/download/v1.17.1/onnxruntime-linux-x64-1.17.1.tgz \
+    && tar -xzf onnxruntime-linux-x64-1.17.1.tgz \
+    && cp -r onnxruntime-linux-x64-1.17.1/include/* /usr/local/include/ \
+    && cp -r onnxruntime-linux-x64-1.17.1/lib/* /usr/local/lib/ \
+    && rm -rf onnxruntime-linux-x64-1.17.1*
 
 WORKDIR /app/backend
 COPY backend/ .
@@ -38,9 +47,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy C++ Backend
+# Copy C++ Backend & Libraries
+COPY --from=backend-builder /usr/local/lib/libonnxruntime* /usr/local/lib/
 COPY --from=backend-builder /app/backend/build/yolo_tracker_backend ./backend/build/yolo_tracker_backend
 COPY backend/models/ ./backend/models/
+
+# Refresh ldconfig for shared libs
+RUN ldconfig
 
 # Copy Frontend
 COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
