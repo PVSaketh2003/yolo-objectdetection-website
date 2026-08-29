@@ -1,0 +1,27 @@
+# Node / Next.js
+frontend/node_modules
+frontend/.next
+frontend/out
+
+# Build & C++ Artifacts
+backend/build
+backend/CMakeFiles
+backend/CMakeCache.txt
+backend/Makefile
+*.o
+*.a
+*.dylib
+*.so
+
+# Log files & Uploads
+logs/
+uploads/
+cloudflare_url.log
+public_url.log
+
+# System & IDE
+.DS_Store
+*.swp
+venv/
+.venv/
+__pycache__/
