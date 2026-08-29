@@ -35,6 +35,9 @@ struct SessionState {
     float fps = 0.0f;
     float inference_ms = 0.0f;
 
+    int frame_counter = 0;
+    std::vector<DetectionBox> cached_detections;
+
     float conf_threshold = 0.45f;
     float nms_threshold = 0.35f;
     int tiling_mode = 0;

@@ -8,10 +8,11 @@ bool YoloDetector::init(const std::string& model_path, float conf_thresh, float 
     input_height_ = target_res;
 
     unsigned num_cores = std::thread::hardware_concurrency();
-    if (num_cores == 0) num_cores = 8;
+    if (num_cores == 0) num_cores = 2;
+    int intra_threads = std::min(std::max(1u, num_cores / 2), 2u);
 
-    session_options_.SetIntraOpNumThreads(4);
-    session_options_.SetInterOpNumThreads(4);
+    session_options_.SetIntraOpNumThreads(intra_threads);
+    session_options_.SetInterOpNumThreads(1);
     session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     session_options_.EnableCpuMemArena();
 

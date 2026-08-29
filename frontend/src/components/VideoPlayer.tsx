@@ -126,9 +126,9 @@ export function VideoPlayer({
           {hasStreamError && (
             <div className="absolute inset-0 bg-gray-950/90 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 text-white z-20">
               <Video className="w-10 h-10 text-pink-500 mb-3 animate-bounce" />
-              <h4 className="font-bold text-sm">Connecting to C++ Stream Feed...</h4>
+              <h4 className="font-bold text-sm">Connecting to YOLO Tracking Stream...</h4>
               <p className="text-xs text-gray-400 max-w-sm mt-1 mb-4">
-                Ensure C++ engine is active on http://localhost:8080.
+                Establishing real-time high-speed connection with C++ inference engine.
               </p>
               <button
                 onClick={handleReconnectStream}

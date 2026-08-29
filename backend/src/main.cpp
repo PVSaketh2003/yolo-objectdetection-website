@@ -76,6 +76,8 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         }
         session->current_loaded_source = target_source;
         session->tracker.reset();
+        session->frame_counter = 0;
+        session->cached_detections.clear();
     }
 
     cv::Mat frame;
@@ -83,22 +85,37 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         if (target_type != "webcam" && target_type != "rtsp" && session->cap.isOpened()) {
             session->cap.set(cv::CAP_PROP_POS_FRAMES, 0);
             session->tracker.reset();
+            session->frame_counter = 0;
+            session->cached_detections.clear();
         }
         return;
     }
 
+    session->frame_counter++;
+
     g_detector_pool[0]->set_conf_threshold(cur_conf);
     g_detector_pool[0]->set_nms_threshold(cur_nms);
 
-    auto t0 = std::chrono::high_resolution_clock::now();
-    std::vector<DetectionBox> detections = g_detector_pool[0]->detect(frame);
-    auto t1 = std::chrono::high_resolution_clock::now();
-    float inf_time = std::chrono::duration<float, std::milli>(t1 - t0).count();
+    std::vector<DetectionBox> detections;
+    float inf_time = session->inference_ms;
+
+    int cadence = 2;
+    if (session->frame_counter % cadence == 1 || session->cached_detections.empty()) {
+        auto t0 = std::chrono::high_resolution_clock::now();
+        detections = g_detector_pool[0]->detect(frame);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        inf_time = std::chrono::duration<float, std::milli>(t1 - t0).count();
+        session->cached_detections = detections;
+    } else {
+        detections = session->cached_detections;
+    }
 
     // BYTETRACK 8-STATE KALMAN MOTION FILTER UPDATE
     std::vector<TrackedObject> tracks = session->tracker.update(detections);
 
-    float current_fps = (inf_time > 0.0f) ? (1000.0f / (inf_time + 10.0f)) : 30.0f;
+    float frame_delay_ms = (inf_time / cadence) + 5.0f;
+    float current_fps = (frame_delay_ms > 0.0f) ? (1000.0f / frame_delay_ms) : 30.0f;
+    if (current_fps > 60.0f) current_fps = 60.0f;
 
     cv::Mat display_frame = frame.clone();
     cv::Mat crop_mat;
@@ -172,9 +189,21 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
 
     std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 75};
     std::vector<uchar> frame_jpeg, crop_jpeg;
-    cv::imencode(".jpg", display_frame, frame_jpeg, params);
+
+    cv::Mat send_mat = display_frame;
+    if (display_frame.cols > 960) {
+        double scale = 960.0 / display_frame.cols;
+        cv::resize(display_frame, send_mat, cv::Size(), scale, scale, cv::INTER_AREA);
+    }
+    cv::imencode(".jpg", send_mat, frame_jpeg, params);
+
     if (found_selected && !crop_mat.empty()) {
-        cv::imencode(".jpg", crop_mat, crop_jpeg, params);
+        cv::Mat send_crop = crop_mat;
+        if (crop_mat.cols > 480) {
+            double scale = 480.0 / crop_mat.cols;
+            cv::resize(crop_mat, send_crop, cv::Size(), scale, scale, cv::INTER_AREA);
+        }
+        cv::imencode(".jpg", send_crop, crop_jpeg, params);
     }
 
     {
@@ -243,7 +272,7 @@ int main() {
     }
 
     auto det0 = std::make_unique<YoloDetector>();
-    if (!det0->init(model_path, 0.45f, 0.35f, true, 640)) {
+    if (!det0->init(model_path, 0.45f, 0.35f, true, 416)) {
         Logger::getInstance().critical("Main", "Failed to initialize primary CoreML detector instance");
         return 1;
     }
@@ -463,6 +492,10 @@ int main() {
 
     svr.Get("/api/stream", [](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-cache, no-store, must-revalidate, pre-check=0, post-check=0, max-age=0");
+        res.set_header("Pragma", "no-cache");
+        res.set_header("Expires", "0");
+        res.set_header("X-Accel-Buffering", "no");
         std::string sid = get_session_id_from_req(req);
         auto session = SessionManager::getInstance().get_session(sid);
 
@@ -500,6 +533,10 @@ int main() {
 
     svr.Get("/api/crop", [](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-cache, no-store, must-revalidate, pre-check=0, post-check=0, max-age=0");
+        res.set_header("Pragma", "no-cache");
+        res.set_header("Expires", "0");
+        res.set_header("X-Accel-Buffering", "no");
         std::string sid = get_session_id_from_req(req);
         auto session = SessionManager::getInstance().get_session(sid);
 
