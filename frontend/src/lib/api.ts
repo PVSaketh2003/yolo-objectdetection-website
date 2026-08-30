@@ -164,7 +164,7 @@ export async function uploadVideoParallelChunks(
       return { ok: true, videoSource: finalVideoSource };
     }
 
-    return { ok: true, videoSource: `uploads/${SESSION_ID}/${uploadId}_${file.name}` };
+    return { ok: false, error: "Chunk assembly did not complete on server" };
   } catch (err: any) {
     return { ok: false, error: err.message || "Failed chunked video upload" };
   }

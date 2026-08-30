@@ -66,12 +66,25 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         } else {
             std::vector<std::string> candidates = {
                 target_source,
-                "/Users/pvsairamsaketh/Documents/objectProject/" + target_source,
-                "/Users/pvsairamsaketh/Documents/objectProject/test/15690486_1920_1080_25fps.mp4",
-                "test/15690486_1920_1080_25fps.mp4"
+                "./" + target_source,
+                "/app/" + target_source
             };
+            bool opened = false;
             for (const auto& path : candidates) {
-                if (session->cap.open(path)) break;
+                if (session->cap.open(path)) {
+                    opened = true;
+                    Logger::getInstance().info("VideoCapture", "Successfully opened video file source: " + path);
+                    break;
+                }
+            }
+            if (!opened && target_type == "test_video") {
+                std::vector<std::string> test_candidates = {
+                    "test/15690486_1920_1080_25fps.mp4",
+                    "/app/test/15690486_1920_1080_25fps.mp4"
+                };
+                for (const auto& path : test_candidates) {
+                    if (session->cap.open(path)) break;
+                }
             }
         }
         session->current_loaded_source = target_source;
@@ -272,7 +285,7 @@ int main() {
     }
 
     auto det0 = std::make_unique<YoloDetector>();
-    if (!det0->init(model_path, 0.45f, 0.35f, true, 416)) {
+    if (!det0->init(model_path, 0.45f, 0.35f, true, 640)) {
         Logger::getInstance().critical("Main", "Failed to initialize primary CoreML detector instance");
         return 1;
     }
