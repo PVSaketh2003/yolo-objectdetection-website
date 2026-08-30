@@ -142,23 +142,12 @@ export async function uploadVideoParallelChunks(
       }
     };
 
-    const activeWorkers: Promise<boolean>[] = [];
     for (const idx of chunkIndices) {
-      const p = uploadSingleChunk(idx);
-      activeWorkers.push(p);
-
-      if (activeWorkers.length >= concurrency) {
-        await Promise.race(activeWorkers);
-        for (let i = activeWorkers.length - 1; i >= 0; i--) {
-          const state = await Promise.race([activeWorkers[i], "pending"]);
-          if (state !== "pending") {
-            activeWorkers.splice(i, 1);
-          }
-        }
+      const ok = await uploadSingleChunk(idx);
+      if (!ok) {
+        return { ok: false, error: `Failed to upload video chunk ${idx + 1} of ${totalChunks}` };
       }
     }
-
-    await Promise.all(activeWorkers);
 
     if (finalVideoSource) {
       return { ok: true, videoSource: finalVideoSource };

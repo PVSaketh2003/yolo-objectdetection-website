@@ -36,7 +36,13 @@ struct SessionState {
     float inference_ms = 0.0f;
 
     int frame_counter = 0;
-    std::vector<DetectionBox> cached_detections;
+    std::mutex infer_mtx;
+    std::atomic<bool> is_inferring{false};
+    bool new_detections_ready = false;
+    std::vector<DetectionBox> latest_detections;
+    float latest_inference_ms = 0.0f;
+    cv::Mat frame_for_infer;
+    std::chrono::steady_clock::time_point last_loop_time = std::chrono::steady_clock::now();
 
     float conf_threshold = 0.45f;
     float nms_threshold = 0.35f;

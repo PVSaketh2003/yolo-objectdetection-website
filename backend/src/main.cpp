@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 
 std::vector<std::unique_ptr<YoloDetector>> g_detector_pool;
 std::atomic<bool> g_running(true);
+std::mutex g_upload_mtx;
 
 std::string get_session_id_from_req(const httplib::Request& req) {
     if (req.has_header("X-Session-ID")) {
@@ -90,7 +91,12 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         session->current_loaded_source = target_source;
         session->tracker.reset();
         session->frame_counter = 0;
-        session->cached_detections.clear();
+        {
+            std::lock_guard<std::mutex> lk(session->infer_mtx);
+            session->latest_detections.clear();
+            session->latest_inference_ms = 0.0f;
+            session->new_detections_ready = false;
+        }
     }
 
     cv::Mat frame;
@@ -99,35 +105,68 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
             session->cap.set(cv::CAP_PROP_POS_FRAMES, 0);
             session->tracker.reset();
             session->frame_counter = 0;
-            session->cached_detections.clear();
+            {
+                std::lock_guard<std::mutex> lk(session->infer_mtx);
+                session->latest_detections.clear();
+                session->latest_inference_ms = 0.0f;
+                session->new_detections_ready = false;
+            }
         }
         return;
     }
 
     session->frame_counter++;
 
-    g_detector_pool[0]->set_conf_threshold(cur_conf);
-    g_detector_pool[0]->set_nms_threshold(cur_nms);
+    // NON-BLOCKING ASYNCHRONOUS BACKGROUND INFERENCE DISPATCH
+    bool expected_inferring = false;
+    if (session->is_inferring.compare_exchange_strong(expected_inferring, true)) {
+        {
+            std::lock_guard<std::mutex> lk(session->infer_mtx);
+            session->frame_for_infer = frame.clone();
+        }
 
-    std::vector<DetectionBox> detections;
-    float inf_time = session->inference_ms;
+        std::thread([session, cur_conf, cur_nms]() {
+            cv::Mat img;
+            {
+                std::lock_guard<std::mutex> lk(session->infer_mtx);
+                img = session->frame_for_infer.clone();
+            }
 
-    int cadence = 2;
-    if (session->frame_counter % cadence == 1 || session->cached_detections.empty()) {
-        auto t0 = std::chrono::high_resolution_clock::now();
-        detections = g_detector_pool[0]->detect(frame);
-        auto t1 = std::chrono::high_resolution_clock::now();
-        inf_time = std::chrono::duration<float, std::milli>(t1 - t0).count();
-        session->cached_detections = detections;
-    } else {
-        detections = session->cached_detections;
+            if (!img.empty() && !g_detector_pool.empty()) {
+                g_detector_pool[0]->set_conf_threshold(cur_conf);
+                g_detector_pool[0]->set_nms_threshold(cur_nms);
+
+                auto t0 = std::chrono::high_resolution_clock::now();
+                std::vector<DetectionBox> dets = g_detector_pool[0]->detect(img);
+                auto t1 = std::chrono::high_resolution_clock::now();
+                float inf_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+
+                {
+                    std::lock_guard<std::mutex> lk(session->infer_mtx);
+                    session->latest_detections = std::move(dets);
+                    session->latest_inference_ms = inf_ms;
+                    session->new_detections_ready = true;
+                }
+            }
+            session->is_inferring.store(false);
+        }).detach();
     }
 
-    // BYTETRACK 8-STATE KALMAN MOTION FILTER UPDATE
+    std::vector<DetectionBox> detections;
+    float inf_time = 0.0f;
+    {
+        std::lock_guard<std::mutex> lk(session->infer_mtx);
+        detections = session->latest_detections;
+        inf_time = session->latest_inference_ms;
+    }
+
+    // BYTETRACK 8-STATE KALMAN MOTION FILTER UPDATE (30 FPS SMOOTH TRACKING)
     std::vector<TrackedObject> tracks = session->tracker.update(detections);
 
-    float frame_delay_ms = (inf_time / cadence) + 5.0f;
-    float current_fps = (frame_delay_ms > 0.0f) ? (1000.0f / frame_delay_ms) : 30.0f;
+    auto now_loop = std::chrono::steady_clock::now();
+    float loop_dt_ms = std::chrono::duration<float, std::milli>(now_loop - session->last_loop_time).count();
+    session->last_loop_time = now_loop;
+    float current_fps = (loop_dt_ms > 0.0f) ? (1000.0f / loop_dt_ms) : 30.0f;
     if (current_fps > 60.0f) current_fps = 60.0f;
 
     cv::Mat display_frame = frame.clone();
@@ -308,6 +347,7 @@ int main() {
 
     svr.Post("/api/upload_chunk", [](const httplib::Request& req, httplib::Response& res) {
         setup_cors(res);
+        std::lock_guard<std::mutex> upload_lock(g_upload_mtx);
         try {
             std::string sid = get_session_id_from_req(req);
             auto session = SessionManager::getInstance().get_session(sid);
