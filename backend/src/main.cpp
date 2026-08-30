@@ -131,32 +131,38 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         }
 
         std::thread([session, cur_conf, cur_nms]() {
-            cv::Mat img;
-            {
-                std::lock_guard<std::mutex> lk(session->infer_mtx);
-                img = session->frame_for_infer.clone();
-            }
-
-            if (!img.empty() && !g_detector_pool.empty()) {
-                std::vector<DetectionBox> dets;
-                float inf_ms = 0.0f;
-                {
-                    std::lock_guard<std::mutex> det_lk(g_detector_mtx);
-                    g_detector_pool[0]->set_conf_threshold(cur_conf);
-                    g_detector_pool[0]->set_nms_threshold(cur_nms);
-
-                    auto t0 = std::chrono::high_resolution_clock::now();
-                    dets = g_detector_pool[0]->detect(img);
-                    auto t1 = std::chrono::high_resolution_clock::now();
-                    inf_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
-                }
-
+            try {
+                cv::Mat img;
                 {
                     std::lock_guard<std::mutex> lk(session->infer_mtx);
-                    session->latest_detections = std::move(dets);
-                    session->latest_inference_ms = inf_ms;
-                    session->new_detections_ready = true;
+                    img = session->frame_for_infer.clone();
                 }
+
+                if (!img.empty() && !g_detector_pool.empty()) {
+                    std::vector<DetectionBox> dets;
+                    float inf_ms = 0.0f;
+                    {
+                        std::lock_guard<std::mutex> det_lk(g_detector_mtx);
+                        g_detector_pool[0]->set_conf_threshold(cur_conf);
+                        g_detector_pool[0]->set_nms_threshold(cur_nms);
+
+                        auto t0 = std::chrono::high_resolution_clock::now();
+                        dets = g_detector_pool[0]->detect(img);
+                        auto t1 = std::chrono::high_resolution_clock::now();
+                        inf_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lk(session->infer_mtx);
+                        session->latest_detections = std::move(dets);
+                        session->latest_inference_ms = inf_ms;
+                        session->new_detections_ready = true;
+                    }
+                }
+            } catch (const std::exception& e) {
+                Logger::getInstance().error("AsyncInfer", std::string("Async inference exception caught: ") + e.what());
+            } catch (...) {
+                Logger::getInstance().error("AsyncInfer", "Unknown exception in async inference thread");
             }
             session->is_inferring.store(false);
         }).detach();
@@ -225,7 +231,7 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         }
     }
 
-    // DRAW PRESENTABLE FPS & LATENCY MS HUD BADGE
+    // DRAW PRESENTABLE FPS & LATENCY MS HUD BADGE SAFELY
     {
         std::ostringstream hud_stream;
         hud_stream << std::fixed << std::setprecision(2)
@@ -235,18 +241,22 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
         int base = 0;
         cv::Size sz = cv::getTextSize(hud_text, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &base);
         int margin = 15;
-        int bx = display_frame.cols - sz.width - margin - 20;
-        int by = margin + 10;
+        int bx = std::max(0, display_frame.cols - sz.width - margin - 20);
+        int by = std::max(0, margin + 10);
+        int bw = std::min(sz.width + 20, display_frame.cols - bx);
+        int bh = std::min(sz.height + 14, display_frame.rows - by);
 
-        cv::Rect bg_r(bx, by, sz.width + 20, sz.height + 14);
-        cv::Mat roi = display_frame(bg_r);
-        cv::Mat color(roi.size(), CV_8UC3, cv::Scalar(10, 15, 25));
-        double alpha = 0.75;
-        cv::addWeighted(color, alpha, roi, 1.0 - alpha, 0.0, roi);
+        if (bw > 0 && bh > 0 && bx + bw <= display_frame.cols && by + bh <= display_frame.rows) {
+            cv::Rect bg_r(bx, by, bw, bh);
+            cv::Mat roi = display_frame(bg_r);
+            cv::Mat color(roi.size(), CV_8UC3, cv::Scalar(10, 15, 25));
+            double alpha = 0.75;
+            cv::addWeighted(color, alpha, roi, 1.0 - alpha, 0.0, roi);
 
-        cv::rectangle(display_frame, bg_r, cv::Scalar(0, 240, 255), 1, cv::LINE_AA);
-        cv::putText(display_frame, hud_text, cv::Point(bx + 10, by + sz.height + 4),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2, cv::LINE_AA);
+            cv::rectangle(display_frame, bg_r, cv::Scalar(0, 240, 255), 1, cv::LINE_AA);
+            cv::putText(display_frame, hud_text, cv::Point(bx + 10, by + sz.height + 4),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2, cv::LINE_AA);
+        }
     }
 
     std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 75};
