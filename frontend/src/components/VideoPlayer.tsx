@@ -13,6 +13,7 @@ interface VideoPlayerProps {
   tilingMode: number;
   isPlaying: boolean;
   sourceType: string;
+  videoSource?: string;
   fps: number;
   latency: number;
   onOpenLogs: () => void;
@@ -28,6 +29,7 @@ export function VideoPlayer({
   tilingMode,
   isPlaying,
   sourceType,
+  videoSource,
   fps,
   latency,
   onOpenLogs,
@@ -39,6 +41,12 @@ export function VideoPlayer({
   const [hoveredTrackId, setHoveredTrackId] = useState<number | null>(null);
   const [streamKey, setStreamKey] = useState(1);
   const [hasStreamError, setHasStreamError] = useState(false);
+
+  // Automatically refresh video stream socket whenever user changes or uploads a new video
+  React.useEffect(() => {
+    setHasStreamError(false);
+    setStreamKey((prev) => prev + 1);
+  }, [sourceType, videoSource]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 

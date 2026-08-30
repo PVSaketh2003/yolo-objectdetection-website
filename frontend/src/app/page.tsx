@@ -91,6 +91,7 @@ export default function Home() {
                     tilingMode={status?.tiling_mode || 0}
                     isPlaying={status?.is_playing ?? true}
                     sourceType={status?.source_type || "sample"}
+                    videoSource={status?.video_source || ""}
                     fps={status?.fps || 0}
                     latency={status?.inference_ms || 0}
                     onOpenLogs={() => setShowLogs(true)}
