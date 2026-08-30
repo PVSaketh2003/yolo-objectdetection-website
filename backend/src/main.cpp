@@ -59,19 +59,19 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
     if (target_source != session->current_loaded_source) {
         if (session->cap.isOpened()) session->cap.release();
 
+        bool opened = false;
         if (target_type == "webcam") {
             int cam_idx = 0;
             try { cam_idx = std::stoi(target_source); } catch (...) { cam_idx = 0; }
-            session->cap.open(cam_idx);
+            opened = session->cap.open(cam_idx);
         } else if (target_type == "rtsp" || target_source.rfind("rtsp://", 0) == 0 || target_source.rfind("http://", 0) == 0 || target_source.rfind("https://", 0) == 0) {
-            session->cap.open(target_source, cv::CAP_FFMPEG);
+            opened = session->cap.open(target_source, cv::CAP_FFMPEG);
         } else {
             std::vector<std::string> candidates = {
                 target_source,
                 "./" + target_source,
                 "/app/" + target_source
             };
-            bool opened = false;
             for (const auto& path : candidates) {
                 if (session->cap.open(path, cv::CAP_FFMPEG) || session->cap.open(path)) {
                     opened = true;
@@ -85,9 +85,18 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
                     "/app/test/15690486_1920_1080_25fps.mp4"
                 };
                 for (const auto& path : test_candidates) {
-                    if (session->cap.open(path, cv::CAP_FFMPEG) || session->cap.open(path)) break;
+                    if (session->cap.open(path, cv::CAP_FFMPEG) || session->cap.open(path)) {
+                        opened = true;
+                        break;
+                    }
                 }
             }
+        }
+
+        if (opened) {
+            Logger::getInstance().info("VideoCapture", "Video stream active. Total frames: " + std::to_string(session->cap.get(cv::CAP_PROP_FRAME_COUNT)));
+        } else {
+            Logger::getInstance().error("VideoCapture", "Failed to open video source: " + target_source + " (Type: " + target_type + ")");
         }
         session->current_loaded_source = target_source;
         session->tracker.reset();

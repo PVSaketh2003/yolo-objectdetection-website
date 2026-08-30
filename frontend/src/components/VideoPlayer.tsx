@@ -39,14 +39,33 @@ export function VideoPlayer({
   const [localConf, setLocalConf] = useState(confThreshold);
   const [localNms, setLocalNms] = useState(nmsThreshold);
   const [hoveredTrackId, setHoveredTrackId] = useState<number | null>(null);
-  const [streamKey, setStreamKey] = useState(1);
-  const [hasStreamError, setHasStreamError] = useState(false);
+  const [streamKey, setStreamKey] = useState<number>(1);
+  const [hasStreamError, setHasStreamError] = useState<boolean>(false);
+  const prevSourceRef = useRef<string>("");
 
-  // Automatically refresh video stream socket whenever user changes or uploads a new video
+  // Refresh video stream socket only when the video source or type actually changes
   React.useEffect(() => {
-    setHasStreamError(false);
-    setStreamKey((prev) => prev + 1);
+    const currentKey = `${sourceType}:${videoSource || ""}`;
+    if (prevSourceRef.current && prevSourceRef.current !== currentKey) {
+      console.log(`[VideoPlayer] Video source updated: ${prevSourceRef.current} -> ${currentKey}`);
+      setHasStreamError(false);
+      setStreamKey((prev) => prev + 1);
+    } else if (!prevSourceRef.current && currentKey) {
+      console.log(`[VideoPlayer] Initializing video source: ${currentKey}`);
+    }
+    prevSourceRef.current = currentKey;
   }, [sourceType, videoSource]);
+
+  const handleImageError = () => {
+    // If backend is active and transmitting metrics/tracks, do not show error overlay
+    if (fps > 0 || tracks.length > 0) {
+      console.log(`[VideoPlayer] Stream image transient load, backend active (FPS=${fps}, Tracks=${tracks.length}).`);
+      setHasStreamError(false);
+    } else {
+      console.warn(`[VideoPlayer] Stream image error event fired for key=${streamKey}`);
+      setHasStreamError(true);
+    }
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -127,7 +146,7 @@ export function VideoPlayer({
             src={`${STREAM_URL}?k=${streamKey}`}
             alt="Real-Time YOLO Object Tracking Stream"
             className="w-full h-full object-contain"
-            onError={() => setHasStreamError(true)}
+            onError={handleImageError}
           />
 
           {/* Reconnect Overlay */}
