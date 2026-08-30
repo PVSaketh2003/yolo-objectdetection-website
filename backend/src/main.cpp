@@ -25,6 +25,7 @@ namespace fs = std::filesystem;
 std::vector<std::unique_ptr<YoloDetector>> g_detector_pool;
 std::atomic<bool> g_running(true);
 std::mutex g_upload_mtx;
+std::mutex g_detector_mtx;
 
 std::string get_session_id_from_req(const httplib::Request& req) {
     if (req.has_header("X-Session-ID")) {
@@ -72,7 +73,7 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
             };
             bool opened = false;
             for (const auto& path : candidates) {
-                if (session->cap.open(path)) {
+                if (session->cap.open(path, cv::CAP_FFMPEG) || session->cap.open(path)) {
                     opened = true;
                     Logger::getInstance().info("VideoCapture", "Successfully opened video file source: " + path);
                     break;
@@ -84,7 +85,7 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
                     "/app/test/15690486_1920_1080_25fps.mp4"
                 };
                 for (const auto& path : test_candidates) {
-                    if (session->cap.open(path)) break;
+                    if (session->cap.open(path, cv::CAP_FFMPEG) || session->cap.open(path)) break;
                 }
             }
         }
@@ -103,16 +104,11 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
     if (!session->cap.isOpened() || !session->cap.read(frame) || frame.empty()) {
         if (target_type != "webcam" && target_type != "rtsp" && session->cap.isOpened()) {
             session->cap.set(cv::CAP_PROP_POS_FRAMES, 0);
-            session->tracker.reset();
-            session->frame_counter = 0;
-            {
-                std::lock_guard<std::mutex> lk(session->infer_mtx);
-                session->latest_detections.clear();
-                session->latest_inference_ms = 0.0f;
-                session->new_detections_ready = false;
-            }
+            session->cap.read(frame);
         }
-        return;
+        if (frame.empty()) {
+            return;
+        }
     }
 
     session->frame_counter++;
@@ -133,13 +129,18 @@ void process_session_frame(std::shared_ptr<SessionState> session) {
             }
 
             if (!img.empty() && !g_detector_pool.empty()) {
-                g_detector_pool[0]->set_conf_threshold(cur_conf);
-                g_detector_pool[0]->set_nms_threshold(cur_nms);
+                std::vector<DetectionBox> dets;
+                float inf_ms = 0.0f;
+                {
+                    std::lock_guard<std::mutex> det_lk(g_detector_mtx);
+                    g_detector_pool[0]->set_conf_threshold(cur_conf);
+                    g_detector_pool[0]->set_nms_threshold(cur_nms);
 
-                auto t0 = std::chrono::high_resolution_clock::now();
-                std::vector<DetectionBox> dets = g_detector_pool[0]->detect(img);
-                auto t1 = std::chrono::high_resolution_clock::now();
-                float inf_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+                    auto t0 = std::chrono::high_resolution_clock::now();
+                    dets = g_detector_pool[0]->detect(img);
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    inf_ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+                }
 
                 {
                     std::lock_guard<std::mutex> lk(session->infer_mtx);
@@ -286,7 +287,7 @@ void process_loop() {
         }
 
         SessionManager::getInstance().purge_expired_sessions(30);
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
     }
 }
 
