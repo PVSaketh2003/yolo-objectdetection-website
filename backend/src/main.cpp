@@ -339,6 +339,7 @@ int main() {
     std::thread proc_thread(process_loop);
 
     httplib::Server svr;
+    svr.new_task_queue = [] { return new httplib::ThreadPool(32, 64); };
     svr.set_payload_max_length(1024 * 1024 * 1024);
 
     svr.Options(".*", [](const httplib::Request&, httplib::Response& res) {
