@@ -78,47 +78,31 @@ std::vector<DetectionBox> TilingEngine::detect_with_sahi_tiling(
     // 1. GENERATE 4 OVERLAPPING SUB-TILES (20% OVERLAP)
     std::vector<TileRegion> tiles = generate_tiles(orig_w, orig_h, 2, 2, 0.20f);
 
-    std::vector<std::future<std::vector<DetectionBox>>> futures;
-    futures.reserve(tiles.size());
-
     for (size_t i = 0; i < tiles.size(); ++i) {
         const auto& tile = tiles[i];
         cv::Mat tile_crop = full_frame(tile.rect).clone();
-        size_t det_idx = (i + 1) % detector_pool.size();
-        if (det_idx == 0 && detector_pool.size() > 1) det_idx = 1;
+        size_t det_idx = i % detector_pool.size();
         YoloDetector* det_ptr = detector_pool[det_idx].get();
 
-        futures.push_back(std::async(std::launch::async, [det_ptr, tile_crop, tile]() {
-            std::vector<DetectionBox> tile_dets = det_ptr->detect(tile_crop);
-            std::vector<DetectionBox> small_gated_dets;
-
-            for (auto& det : tile_dets) {
-                // SCALE GATING RULE: SUB-TILES ONLY DETECT SMALL / DISTANT OBJECTS!
-                if (det.class_id == 0) { // Person
-                    // Person in sub-tile must be SMALL/DISTANT (height <= 140px in full-frame space)
-                    if (det.box.height > 140.0f || det.box.height < 18.0f) continue;
-                    float aspect = det.box.height / det.box.width;
-                    if (aspect < 1.10f || aspect > 3.8f) continue; // Eliminates crop artifact boxes on car doors!
-                } else if (det.class_id == 2) { // Car
-                    // Car in sub-tile must be SMALL/DISTANT (width <= 180px in full-frame space)
-                    if (det.box.width > 180.0f || det.box.width < 20.0f) continue;
-                    float aspect = det.box.width / det.box.height;
-                    if (aspect < 1.05f || aspect > 3.8f) continue;
-                }
-
-                // Translate local sub-tile coordinates to full-frame space
-                det.box.x += tile.rect.x;
-                det.box.y += tile.rect.y;
-
-                small_gated_dets.push_back(det);
+        std::vector<DetectionBox> tile_dets = det_ptr->detect(tile_crop);
+        for (auto& det : tile_dets) {
+            // SCALE GATING RULE: SUB-TILES ONLY DETECT SMALL / DISTANT OBJECTS!
+            if (det.class_id == 0) { // Person
+                if (det.box.height > 140.0f || det.box.height < 18.0f) continue;
+                float aspect = det.box.height / det.box.width;
+                if (aspect < 1.10f || aspect > 3.8f) continue;
+            } else if (det.class_id == 2) { // Car
+                if (det.box.width > 180.0f || det.box.width < 20.0f) continue;
+                float aspect = det.box.width / det.box.height;
+                if (aspect < 1.05f || aspect > 3.8f) continue;
             }
-            return small_gated_dets;
-        }));
-    }
 
-    for (auto& fut : futures) {
-        std::vector<DetectionBox> tile_dets = fut.get();
-        all_raw_detections.insert(all_raw_detections.end(), tile_dets.begin(), tile_dets.end());
+            // Translate local sub-tile coordinates to full-frame space
+            det.box.x += tile.rect.x;
+            det.box.y += tile.rect.y;
+
+            all_raw_detections.push_back(det);
+        }
     }
 
     // STRICT CROSS-SCALE IOU & IOA FUSION DEDUPLICATION

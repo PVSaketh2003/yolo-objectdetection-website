@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { STREAM_URL, TrackObject, selectTrackId, updateSettings } from "@/lib/api";
-import { Play, Pause, Video, Sliders, Target, RefreshCw, Terminal, User, Car, Settings, Activity, ShieldCheck } from "lucide-react";
+import { Play, Pause, Video, Sliders, Target, RefreshCw, Terminal, User, Car, Settings, Activity, ShieldCheck, Zap } from "lucide-react";
 
 interface VideoPlayerProps {
   tracks: TrackObject[];
@@ -217,10 +217,9 @@ export function VideoPlayer({
 
           {/* Top-Left Click Hint & Class Badges */}
           <div className="absolute top-2.5 left-2.5 sm:top-4 sm:left-4 flex flex-wrap items-center gap-1.5 pointer-events-none z-10">
-            <div className="bg-black/75 backdrop-blur-md px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-lg sm:rounded-xl border border-white/15 text-[10px] sm:text-xs font-semibold text-white flex items-center space-x-1.5 shadow-xl">
-              <Target className="w-3.5 h-3.5 text-pink-500 animate-pulse shrink-0" />
-              <span className="hidden sm:inline">Click any box to lock crop view</span>
-              <span className="sm:hidden">Tap box</span>
+            <div className="bg-black/85 backdrop-blur-md px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-lg sm:rounded-xl border border-indigo-500/30 text-[10px] sm:text-xs font-bold text-white flex items-center space-x-1.5 shadow-2xl">
+              <Zap className="w-3.5 h-3.5 text-indigo-400 animate-pulse shrink-0" />
+              <span>Ultralytics YOLO (yolo26s.onnx)</span>
             </div>
 
             <div className="bg-cyan-500/20 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-cyan-500/30 text-[10px] sm:text-xs font-bold text-cyan-300 flex items-center space-x-1 shadow-xl">
@@ -236,12 +235,12 @@ export function VideoPlayer({
 
           {/* Top-Right Presentable FPS & Latency (ms) HUD Badges on Frame */}
           <div className="absolute top-2.5 right-2.5 sm:top-4 sm:right-4 flex items-center space-x-1.5 pointer-events-none z-10 font-mono">
-            <div className="bg-black/80 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-400 flex items-center space-x-1 shadow-2xl">
+            <div className="bg-black/85 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-400 flex items-center space-x-1 shadow-2xl">
               <Activity className="w-3 h-3 text-emerald-400 shrink-0" />
               <span>{formattedFps} FPS</span>
             </div>
 
-            <div className="bg-black/80 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-cyan-500/40 text-[10px] sm:text-xs font-bold text-cyan-300 flex items-center space-x-1 shadow-2xl">
+            <div className="bg-black/85 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-cyan-500/40 text-[10px] sm:text-xs font-bold text-cyan-300 flex items-center space-x-1 shadow-2xl">
               <ShieldCheck className="w-3 h-3 text-cyan-400 shrink-0" />
               <span>{formattedLatency} ms</span>
             </div>
