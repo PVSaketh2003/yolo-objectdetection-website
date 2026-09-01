@@ -23,6 +23,7 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadedSourcePath, setUploadedSourcePath] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [manualVideoPath, setManualVideoPath] = useState("");
   const [isDragging, setIsDragging] = useState(false);
 
   // Preset State
@@ -83,11 +84,12 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
 
   const handleLaunchStudio = async () => {
     if (selectedMode === "upload") {
-      if (!uploadedSourcePath) {
-        setUploadError("Please upload a video file first before launching");
+      const finalPath = manualVideoPath.trim() || uploadedSourcePath;
+      if (!finalPath) {
+        setUploadError("Please upload a video file or enter a valid video path first");
         return;
       }
-      await changeVideoSource("file", uploadedSourcePath);
+      await changeVideoSource("file", finalPath);
     } else if (selectedMode === "rtsp") {
       if (!rtspUrl.trim()) {
         setRtspError("Please enter a valid RTSP or HTTP stream URL");
@@ -237,6 +239,25 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
                   onChange={handleFileChange}
                   accept="video/*"
                   className="hidden"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 my-2">
+                <div className="h-px bg-[var(--border-color)] flex-1" />
+                <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Or Enter Local Video Path</span>
+                <div className="h-px bg-[var(--border-color)] flex-1" />
+              </div>
+
+              <div className="space-y-1">
+                <input
+                  type="text"
+                  value={manualVideoPath}
+                  onChange={(e) => {
+                    setManualVideoPath(e.target.value);
+                    setUploadError(null);
+                  }}
+                  placeholder="e.g. test/14365420-hd_1920_1080_60fps.mp4 or /path/to/video.mp4"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
