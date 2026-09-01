@@ -51,13 +51,13 @@ export function LogsConsole({ isOpen, onClose }: LogsConsoleProps) {
             </div>
             <div>
               <h3 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
-                C++ System Diagnostic Console
+                Python FastAPI Diagnostic Console
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono">
                   Live Stream
                 </span>
               </h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Real-time C++ backend event logs, warnings, and hardware execution trace
+                Real-time Python FastAPI backend event logs, warnings, and hardware execution trace
               </p>
             </div>
           </div>

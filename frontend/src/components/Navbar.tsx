@@ -30,8 +30,8 @@ export function Navbar({ status, onChangeSource }: NavbarProps) {
             <h1 className="font-bold text-base tracking-tight text-[var(--text-primary)]">
               YOLO26 <span className="bg-gradient-to-r from-indigo-500 to-pink-500 bg-clip-text text-transparent">Tracker Studio</span>
             </h1>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-cyan-400 border border-indigo-500/20">
-              OFFLINE C++
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              FASTAPI PYTHON
             </span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] hidden sm:block">

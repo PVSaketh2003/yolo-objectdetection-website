@@ -19,6 +19,9 @@ export interface BackendStatus {
   tiling_mode: number;
   is_playing: boolean;
   tracks: TrackObject[];
+  face_detected?: boolean;
+  face_count?: number;
+  hardware_accel?: string;
 }
 
 export interface SystemLogEntry {

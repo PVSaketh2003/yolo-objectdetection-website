@@ -1,26 +1,44 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TrackObject, CROP_STREAM_URL } from "@/lib/api";
+import { TrackObject, SESSION_ID } from "@/lib/api";
 import { X, Target, Download, Eye, ArrowUpRight, Crosshair, Sparkles } from "lucide-react";
 
 interface CroppedInspectorProps {
   selectedTrackId: number;
   selectedTrackObj: TrackObject | null;
+  faceDetected?: boolean;
+  faceCount?: number;
   onDeselect: () => void;
 }
 
 export function CroppedInspector({
   selectedTrackId,
   selectedTrackObj,
+  faceDetected,
+  faceCount,
   onDeselect,
 }: CroppedInspectorProps) {
   const [streamError, setStreamError] = useState(false);
-  const [key, setKey] = useState(0);
+  const [imgUrl, setImgUrl] = useState<string>("");
 
   useEffect(() => {
+    if (selectedTrackId === -1) return;
     setStreamError(false);
-    setKey((prev) => prev + 1);
+
+    let isMounted = true;
+    const updateSrc = () => {
+      if (!isMounted) return;
+      setImgUrl(`/api/crop_image?sid=${SESSION_ID}&t=${Date.now()}`);
+    };
+
+    updateSrc();
+    const interval = setInterval(updateSrc, 60); // 16 FPS high-speed image polling (no proxy buffering)
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [selectedTrackId]);
 
   const handleDownloadSnapshot = () => {
@@ -85,9 +103,8 @@ export function CroppedInspector({
       {/* Cropped Live Stream Display */}
       <div className="relative aspect-square w-full bg-black flex items-center justify-center overflow-hidden group">
         <img
-          key={key}
           id="crop-stream-img"
-          src={`${CROP_STREAM_URL}?t=${key}`}
+          src={imgUrl}
           alt={`Cropped view of tracked object #${selectedTrackId}`}
           className="w-full h-full object-contain"
           onError={() => setStreamError(true)}
@@ -100,8 +117,16 @@ export function CroppedInspector({
         )}
 
         {/* Live Overlay HUD Badge */}
-        <div className="absolute top-2 left-2 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-cyan-300 border border-cyan-500/40">
-          ROI CROP STREAM
+        <div className="absolute top-2 left-2 flex items-center space-x-1.5 z-10">
+          <div className="px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-cyan-300 border border-cyan-500/40">
+            ROI CROP STREAM
+          </div>
+          {faceDetected && (
+            <div className="px-2.5 py-1 rounded-md bg-cyan-500/80 text-black font-bold text-[10px] font-mono shadow-lg flex items-center gap-1 animate-pulse">
+              <Sparkles className="w-3 h-3" />
+              <span>FACE DETECTED ({faceCount || 1})</span>
+            </div>
+          )}
         </div>
 
         {/* Quick Action Overlay */}

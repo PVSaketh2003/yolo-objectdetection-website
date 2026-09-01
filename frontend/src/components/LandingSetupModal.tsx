@@ -194,7 +194,7 @@ export function LandingSetupModal({ isOpen, onClose, onSourceSelected }: Landing
                   Click or Drag & Drop Video File Here
                 </h4>
                 <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm">
-                  Powered by <strong className="text-indigo-400">Parallel Multi-Threaded Chunked Uploads</strong> for sub-second 100MB+ transfers directly to C++.
+                  Powered by <strong className="text-indigo-400">Parallel Multi-Threaded Chunked Uploads</strong> for sub-second 100MB+ transfers directly to Python FastAPI.
                 </p>
 
                 <input
@@ -212,7 +212,7 @@ export function LandingSetupModal({ isOpen, onClose, onSourceSelected }: Landing
                   <div className="flex justify-between items-center text-xs font-semibold">
                     <span className="text-[var(--text-primary)] flex items-center gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-pink-500 animate-spin" />
-                      Uploading Parallel Chunks to C++ Engine...
+                      Uploading Parallel Chunks to Python FastAPI Engine...
                     </span>
                     <span className="font-mono text-cyan-400 font-bold">{uploadPct}% ({uploadSpeedMbps} Mbps)</span>
                   </div>
@@ -249,7 +249,7 @@ export function LandingSetupModal({ isOpen, onClose, onSourceSelected }: Landing
                   className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
                 />
                 <p className="text-[11px] text-[var(--text-muted)]">
-                  Supports live <code className="text-indigo-400">rtsp://</code>, <code className="text-indigo-400">rtmp://</code>, <code className="text-indigo-400">http://</code>, and <code className="text-indigo-400">https://</code> stream URLs via C++ FFmpeg hardware reader.
+                  Supports live <code className="text-indigo-400">rtsp://</code>, <code className="text-indigo-400">rtmp://</code>, <code className="text-indigo-400">http://</code>, and <code className="text-indigo-400">https://</code> stream URLs via OpenCV hardware reader.
                 </p>
               </div>
 

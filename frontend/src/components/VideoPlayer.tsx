@@ -143,7 +143,7 @@ export function VideoPlayer({
         >
           <img
             key={streamKey}
-            src={`${STREAM_URL}?k=${streamKey}`}
+            src={`${STREAM_URL}&k=${streamKey}`}
             alt="Real-Time YOLO Object Tracking Stream"
             className="w-full h-full object-contain"
             onError={handleImageError}
@@ -155,7 +155,7 @@ export function VideoPlayer({
               <Video className="w-10 h-10 text-pink-500 mb-3 animate-bounce" />
               <h4 className="font-bold text-sm">Connecting to YOLO Tracking Stream...</h4>
               <p className="text-xs text-gray-400 max-w-sm mt-1 mb-4">
-                Establishing real-time high-speed connection with C++ inference engine.
+                Establishing real-time connection with Python FastAPI inference engine.
               </p>
               <button
                 onClick={handleReconnectStream}
@@ -191,17 +191,17 @@ export function VideoPlayer({
                     onMouseLeave={() => setHoveredTrackId(null)}
                   />
 
-                  {/* Visible Interactive Bounding Box */}
+                  {/* Interactive Bounding Box Target Selection Surface */}
                   <rect
                     x={trk.box.x}
                     y={trk.box.y}
                     width={trk.box.w}
                     height={trk.box.h}
-                    fill={isSelected ? "rgba(255, 0, 220, 0.25)" : isHovered ? "rgba(0, 240, 255, 0.18)" : "transparent"}
-                    stroke={isSelected ? "#FF00DC" : isHovered ? "#00F0FF" : "transparent"}
-                    strokeWidth={isSelected ? 5 : isHovered ? 4 : 0}
+                    fill={isHovered ? "rgba(0, 240, 255, 0.15)" : "transparent"}
+                    stroke={isHovered ? "#00F0FF" : "transparent"}
+                    strokeWidth={isHovered ? 2 : 0}
                     rx="6"
-                    className="transition-all duration-150"
+                    className="transition-all duration-75"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectTrack(trk.track_id);
@@ -275,10 +275,10 @@ export function VideoPlayer({
           <button
             onClick={onOpenLogs}
             className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 dark:text-indigo-300 border border-indigo-500/30 text-xs font-semibold flex items-center space-x-1.5 transition-all"
-            title="Open Live C++ System Diagnostics Logs"
+            title="Open Live Python FastAPI System Diagnostics Logs"
           >
             <Terminal className="w-3.5 h-3.5 text-cyan-500" />
-            <span>C++ Logs</span>
+            <span>Python Logs</span>
           </button>
 
           <button

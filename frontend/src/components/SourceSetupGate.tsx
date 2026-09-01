@@ -120,7 +120,7 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
         <div className="text-center space-y-3">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-bold text-indigo-500 dark:text-cyan-400">
             <Zap className="w-3.5 h-3.5 animate-pulse" />
-            <span>YOLO26s C++ Real-Time Studio</span>
+            <span>YOLO26s Python Real-Time Studio</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
@@ -177,7 +177,7 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
             <div>
               <h3 className="font-bold text-sm text-[var(--text-primary)]">Live RTSP / IP Camera</h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Direct C++ FFmpeg connection to live security cameras & network feeds
+                Direct OpenCV connection to live security cameras & network feeds
               </p>
             </div>
           </div>
@@ -264,7 +264,7 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
               {isUploading && (
                 <div className="p-4 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-color)] space-y-2">
                   <div className="flex justify-between items-center text-xs font-semibold">
-                    <span className="text-[var(--text-primary)]">Uploading Parallel Chunks directly to C++...</span>
+                    <span className="text-[var(--text-primary)]">Uploading Parallel Chunks directly to Python FastAPI...</span>
                     <span className="font-mono text-cyan-400 font-bold">{uploadPct}% ({uploadSpeedMbps} Mbps)</span>
                   </div>
                   <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden">
@@ -279,7 +279,7 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
               {uploadedSourcePath && !isUploading && (
                 <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Video file uploaded and verified by C++ engine! Ready to launch.</span>
+                  <span>Video file uploaded and verified by Python engine! Ready to launch.</span>
                 </div>
               )}
 
@@ -307,7 +307,7 @@ export function SourceSetupGate({ onLaunch }: SourceSetupGateProps) {
                   className="w-full px-4 py-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-purple-500"
                 />
                 <p className="text-[11px] text-[var(--text-muted)]">
-                  C++ native FFmpeg hardware stream reader supports <code className="text-purple-400">rtsp://</code>, <code className="text-purple-400">http://</code>, and <code className="text-purple-400">rtmp://</code> feeds.
+                  Native OpenCV hardware stream reader supports <code className="text-purple-400">rtsp://</code>, <code className="text-purple-400">http://</code>, and <code className="text-purple-400">rtmp://</code> feeds.
                 </p>
               </div>
 

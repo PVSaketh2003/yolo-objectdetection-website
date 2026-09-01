@@ -67,12 +67,12 @@ export default function Home() {
                 <div className="flex items-center space-x-2">
                   <AlertCircle className="w-4 h-4 text-amber-500 animate-bounce shrink-0" />
                   <span>
-                    Connecting to C++ YOLO Engine... Ensure backend server is active.
+                    Connecting to Python FastAPI YOLO Engine... Ensure backend server is active.
                   </span>
                 </div>
                 <div className="flex items-center space-x-2 font-mono">
                   <Server className="w-3.5 h-3.5" />
-                  <span>Offline Mode</span>
+                  <span>Python Mode</span>
                 </div>
               </div>
             )}
@@ -111,8 +111,10 @@ export default function Home() {
                 <div className="lg:col-span-4 relative">
                   <div className="sticky top-20 space-y-4">
                     <CroppedInspector
-                      selectedTrackId={selectedTrackId}
+                      selectedTrackId={status?.selected_track_id ?? selectedTrackId}
                       selectedTrackObj={selectedTrackObj}
+                      faceDetected={status?.face_detected}
+                      faceCount={status?.face_count}
                       onDeselect={() => setSelectedTrackId(-1)}
                     />
                   </div>
@@ -120,7 +122,7 @@ export default function Home() {
               </div>
             </main>
 
-            {/* Diagnostic C++ System Logs Modal Console */}
+            {/* Diagnostic System Logs Modal Console */}
             <LogsConsole isOpen={showLogs} onClose={() => setShowLogs(false)} />
           </>
         )}
