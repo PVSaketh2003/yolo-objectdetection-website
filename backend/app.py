@@ -95,6 +95,7 @@ class SessionState:
         self.inference_ms = 12.0
         self.current_tracks: List[Dict[str, Any]] = []
         self.current_frame_jpeg: bytes = b""
+        self.current_crop_jpeg: bytes = b""
         self.cap = None
         self.lock = threading.Lock()
         self.running = True
@@ -221,6 +222,25 @@ def process_session_frame(session: SessionState):
         if ret_jpg:
             session.current_frame_jpeg = jpeg_buf.tobytes()
 
+        # Extract crop for selected target if selected_track_id != -1
+        if session.selected_track_id != -1 and len(tracks_list) > 0:
+            target_trk = next((t for t in tracks_list if t["track_id"] == session.selected_track_id), None)
+            if target_trk:
+                box = target_trk["box"]
+                x = max(0, int(box["x"]))
+                y = max(0, int(box["y"]))
+                w = max(1, int(box["w"]))
+                h = max(1, int(box["h"]))
+                img_h, img_w = frame.shape[:2]
+                x2 = min(img_w, x + w)
+                y2 = min(img_h, y + h)
+
+                if x2 > x and y2 > y:
+                    crop_mat = frame[y:y2, x:x2]
+                    ret_crop, crop_buf = cv2.imencode(".jpg", crop_mat, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                    if ret_crop:
+                        session.current_crop_jpeg = crop_buf.tobytes()
+
 # Start background worker thread
 worker_thread = threading.Thread(target=session_worker_loop, daemon=True)
 worker_thread.start()
@@ -249,6 +269,18 @@ async def get_status(request: Request):
             "tracks": session.current_tracks,
             "active_model": active_model_path
         }
+
+@app.post("/api/select_track")
+async def select_track(request: Request):
+    sid = request.headers.get("X-Session-ID", "default_session")
+    session = get_session(sid)
+    data = await request.json()
+    track_id = int(data.get("track_id", -1))
+    with session.lock:
+        session.selected_track_id = track_id
+        session.current_crop_jpeg = b""
+    add_log("INFO", "API", f"Selected track target {track_id} for session {sid}")
+    return {"status": "ok", "selected_track_id": track_id}
 
 @app.post("/api/source")
 async def set_source(request: Request):
@@ -363,6 +395,31 @@ async def video_stream(request: Request):
 
     return StreamingResponse(
         frame_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
+
+@app.get("/api/crop")
+async def crop_stream(request: Request):
+    sid = request.headers.get("X-Session-ID", request.query_params.get("sid", "default_session"))
+    session = get_session(sid)
+
+    def crop_generator():
+        while True:
+            jpeg_bytes = session.current_crop_jpeg
+            if jpeg_bytes:
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n"
+                       b"Content-Length: " + str(len(jpeg_bytes)).encode() + b"\r\n\r\n" +
+                       jpeg_bytes + b"\r\n")
+            time.sleep(0.033)
+
+    return StreamingResponse(
+        crop_generator(),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
